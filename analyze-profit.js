@@ -21,6 +21,10 @@ export function getProfitability(s) {
     const hackAdj = (100 - s.minDifficulty) / (100 - s.hackDifficulty);
     const hackChance_ = Math.min(1, s.hackAnalyzeChance_ * hackAdj);
     const hackPercent_ = Math.min(1, s.hackAnalyze_ * hackAdj);
+    // Hacking time adjustment.
+    const hackTimeTermCurr = 2.5 * s.requiredHackingSkill * s.hackDifficulty + 500;
+    const hackTimeTerm = 2.5 * s.requiredHackingSkill * s.minDifficulty + 500;
+    const hackTime_ = s.getHackTime_ * hackTimeTerm / hackTimeTermCurr;
     // These factors are pulled from the game code for growth calculation.
     // They're used to turn current growth rate to growth rate assuming min security.
     const adjGrowthRateCurr = Math.min(1 + 0.03 / s.hackDifficulty, 1.0035);
@@ -38,10 +42,10 @@ export function getProfitability(s) {
     // Amount of money/hack, if doing the theoretical optimum of 1 hack at a time.
     const hackMoney = hackPercent_ * s.moneyMax;
 
-    const profit = hackingFraction * hackChance_ * hackMoney / (s.getHackTime_ * 1.75 / 1000);
+    const profit = hackingFraction * hackChance_ * hackMoney / (hackTime_ * 1.75 / 1000);
     return {
-        hackChance_, hackPercent_, growthBase, growPerHack, weakenPerHack, hackingFraction,
-        hackMoney, profit,
+        hackChance_, hackPercent_, hackTime_, growthBase, growPerHack, weakenPerHack,
+        hackingFraction, hackMoney, profit,
     };
 }
 
@@ -61,7 +65,7 @@ export function analyzeHost(ns, allServerData, host) {
     ns.tprintf("Hacking Skill Required:%15d", s.requiredHackingSkill);
     ns.tprintf("Min Security Level:    %15d", s.minDifficulty);
     ns.tprintf("Server Growth Rate:    %15d", s.serverGrowth);
-    ns.tprintf("Hacking time (sec)     %15.3f", s.getHackTime_ / 1000);
+    ns.tprintf("Hacking time (sec)     %15.3f", p.hackTime_ / 1000);
     ns.tprintf("Hacking Chance:        %15.2f%%", p.hackChance_ * 100);
     ns.tprintf("Money per Hack Success:%15.0f", p.hackMoney);
     ns.tprintf("Growth per Grow:       %15.6fx", Math.exp(p.growthBase));
@@ -76,6 +80,7 @@ export function analyzeTable(ns, allServerData) {
     for (const s of servers) {
         const p = getProfitability(s);
         s.profit = p.profit;
+        s.getHackTime_ = p.hackTime_;
         s.hackChance_ = p.hackChance_;
     }
     // Sort descending
