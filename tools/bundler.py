@@ -15,18 +15,20 @@ if __name__ == "__main__":
         if dirpath == ".":
             dirnames.remove("tools")
         for file_ in filenames:
-            if not file_.endswith(".js"):
+            if not file_.endswith(".js") or file_ == "installer.js":
                 continue
             path = os.path.join(dirpath, file_)
             with open(path) as fh:
                 # Strip leading dot
                 files[path[1:]] = fh.read()
 
-    print("""export function main(ns) {
+    with open("installer.js", "w") as out:
+        print("Writing to installer.js...")
+        print("""export function main(ns) {
   for (const [path, content] of Object.entries(data)) {
     ns.tprintf("Writing %s...", path);
     ns.write(path, content, "w");
   }
 }
 
-var data = """ + json.dumps(files, ensure_ascii=False))
+var data = """ + json.dumps(files, ensure_ascii=False), file=out)
