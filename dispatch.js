@@ -190,7 +190,13 @@ export async function main(ns) {
     grow: 0,
     hosts: {},
   });
-  const serverLimit = await stubCall(ns, "getPurchasedServerLimit");
+  const [serverLimit, cost_2, cost_64] = await stubCall(ns, (ns) => [
+    ns["getPurchasedServerLimit"](),
+    ns["getPurchasedServerCost"](2),
+    ns["getPurchasedServerCost"](64),
+  ]);
+  const cost_62 = cost_64 - cost_2;
+
   let numServers = 0;
   for (const host of Object.keys(global.serverTree)) {
     if (host.startsWith("bought-")) {
@@ -200,7 +206,7 @@ export async function main(ns) {
   const tree = global.serverTree;
   let money = 0;
   while (true) {
-    while (money > 110000 && numServers < serverLimit) {
+    while (money > cost_2 && numServers < serverLimit) {
       const host = "bought-" + numServers;
       await stubCall(ns, "purchaseServer", host, 2);
       await stubCall(ns, "scp", WORKER_SCRIPTS, host);
@@ -210,7 +216,7 @@ export async function main(ns) {
         1
       );
       numServers++;
-      money -= 110000;
+      money -= cost_2;
       global.hosts.push(host);
     }
     // Run the whole loop every time, in case global.hosts changed
@@ -232,11 +238,11 @@ export async function main(ns) {
 
     money = tree["home"].server.moneyAvailable =
       ns.getServerMoneyAvailable("home");
-    if (money < 110000 * 32 || !lastHost.startsWith("bought-")) continue;
+    if (money < cost_62 || !lastHost.startsWith("bought-")) continue;
     if (global.serverTree[lastHost].server.maxRam >= 64) continue;
 
     await stubCall(ns, "upgradePurchasedServer", lastHost, 64);
     tree[lastHost].server = await stubCall(ns, "getServer", lastHost);
-    money -= 110000 * 32;
+    money -= cost_62;
   }
 }
