@@ -1,11 +1,6 @@
 // Main dispatch loop. Handles all decision-making logic.
 import { stubCall } from "/lib/stubcall.js";
-import {
-  treeScan,
-  ramDepsUpdate,
-  ServerEntry,
-  HackChecker,
-} from "/lib/scan.js";
+import { treeScan, ramDepsUpdate, ServerEntry, PortOpener } from "/lib/scan.js";
 
 const WORKER_SCRIPTS = [
   "/worker/hack.js",
@@ -57,7 +52,7 @@ function oneHost(ns, host) {
     host: host,
   });
   info.promise = new Promise((resolve, reject) => {
-    info.resolve = (a) => resolve([info, id, a]);
+    info.resolve = resolve;
     info.reject = reject;
   });
   stats.hosts ??= {};
@@ -98,17 +93,26 @@ function createShares(ns) {
 function hackServers(ns, servers) {
   const targets = [];
   const opener = new PortOpener(ns);
+  const output = [];
   for (const host of servers) {
     const info = global.serverTree[host].server;
-    if (!info.hasAdminRights && opener.canHack(info)) {
-      PortOpener.hack(host);
+    if (!info.hasAdminRights) {
+      if (!opener.canHack(info)) {
+        continue;
+      }
+      opener.hack(host);
       global.serverTree[host].server = ns["getServer"](host);
     }
     if (info.maxRam < 1.75) {
-      ns.tprintf("Ignoring %s because it's tiny: %fGB", host, info.maxRam);
+      output.push(
+        ns.sprintf("Ignoring %s because it's tiny: %fGB", host, info.maxRam)
+      );
       continue;
     }
     targets.push(host);
+  }
+  if (output.length) {
+    ns.tprintf("%s", output.join("\n"));
   }
   return targets;
 }
@@ -219,7 +223,7 @@ export async function main(ns) {
     const [info, id, result] = await Promise.race(
       Object.values(global.workerInfo).map((x) => x.promise)
     );
-    await Promise.resolve(); // Wait for script exit
+    //await null;
 
     const lastHost = info.host;
     stats[info.method]--;
