@@ -7,23 +7,25 @@ export async function mainLoop(ns, workerFunc) {
     return;
   }
   const info = global.workerInfo[ns.args[0]];
-  const bound = workerFunc.bind(ns);
-  info.startTime = performance.now();
-  let promise;
   try {
-    promise = bound(info.target, info.opts);
+    const bound = workerFunc.bind(ns);
+    info.startTime = performance.now();
+    const promise = bound(info.target, info.opts);
+    // On the side, notify our parent.
+    promise.then(
+      (value) => {
+        info.endTime = performance.now();
+        info.resolve(value);
+      },
+      (err) => info.reject(err)
+    );
+    return promise;
   } catch (err) {
+    // This can lead to double error messages, but it's better
+    // than missing them.
     info.reject(err);
+    throw err;
   }
-  // On the side, notify our parent.
-  promise.then(
-    (value) => {
-      info.endTime = performance.now();
-      info.resolve(value);
-    },
-    (err) => info.reject(err)
-  );
-  return promise;
 }
 
 /** @param {NS} ns */
