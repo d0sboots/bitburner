@@ -19,16 +19,27 @@ if __name__ == "__main__":
                 continue
             path = os.path.join(dirpath, file_)
             with open(path) as fh:
-                # Strip leading dot
-                files[path[1:]] = fh.read()
+                if len(dirpath) == 1:
+                    # Root dir files must be bare
+                    adjpath = file_
+                else:
+                    # Strip leading dot, keep slash
+                    adjpath = path[1:]
+                files[adjpath] = fh.read()
 
     with open("installer.js", "w") as out:
         print("Writing to installer.js...")
         print("""export function main(ns) {
+  const buffer = [];
   for (const [path, content] of Object.entries(data)) {
-    ns.tprintf("Writing %s...", path);
-    ns.write(path, content, "w");
+    if (content === ns.read(path)) {
+      buffer.push(ns.sprintf("Skipped %s", path));
+    } else {
+      buffer.push(ns.sprintf("Writing %s...", path));
+      ns.write(path, content, "w");
+    }
   }
+  ns.tprintf("%s", buffer.join("\\n"));
 }
 
 var data = """ + json.dumps(files, ensure_ascii=False), file=out)

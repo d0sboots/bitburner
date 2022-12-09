@@ -11,22 +11,27 @@ const WORKER_SCRIPTS = [
 ];
 
 /** @param {NS} ns */
-function createShares(ns) {
+function createShares(ns, hosts) {
   let shareRam = ns.args[0] ?? 0;
   shareRam -= shareRam % 4;
   shareRam |= 0;
   const tree = global.serverTree;
-  for (let i = global.hosts.length - 1; i >= 0; i--) {
-    const host = global.hosts[i];
-    const servRam = tree[host].server.maxRam;
+  for (let i = hosts.length - 1; i >= 0; i--) {
+    const host = hosts[i];
+    const server = tree[host].server;
+    if (server.ramUsed) {
+      ns.printf("%.2f used ram on %s", server.ramUsed, host);
+    }
+    const servRam = server.maxRam - server.ramUsed;
     if (shareRam <= 0) break;
     if (servRam < 4) continue;
 
     const useRam = Math.min(shareRam, servRam);
     ns.exec("/worker/share.js", host, Math.floor(useRam / 4));
     shareRam -= useRam;
+    server.ramUsed += useRam;
     if (useRam == servRam) {
-      global.hosts.splice(i, 1);
+      hosts.splice(i, 1);
     }
   }
 }
@@ -140,27 +145,21 @@ export async function main(ns) {
     for (const host of Object.keys(global.serverTree)) {
       if (host !== "home") {
         ns["killall"](host);
+        global.serverTree[host].update(ns);
       }
     }
   });
   // Give the UI a chance to do stuff
   await new Promise((resolve) => setTimeout(resolve));
 
-  global.hosts = await stubCall(ns, (ns) => {
+  const hosts = await stubCall(ns, (ns) => {
     return hackServers(ns, Object.keys(global.serverTree));
   });
-  await stubCall(ns, (ns_) => copyScripts(ns_, ns, global.hosts));
+  await stubCall(ns, (ns_) => copyScripts(ns_, ns, hosts));
 
-  createShares(ns);
+  createShares(ns, hosts);
 
   global.target = ns.args[1] ?? "n00dles";
-  global.cb = {};
-  const stats = (global.dispatchStats ??= {
-    hack: 0,
-    weaken: 0,
-    grow: 0,
-    hosts: {},
-  });
   const [serverLimit, cost_2, cost_64] = await stubCall(ns, (ns) => [
     ns["getPurchasedServerLimit"](),
     ns["getPurchasedServerCost"](2),
@@ -190,7 +189,7 @@ export async function main(ns) {
       );
       numServers++;
       money -= cost_2;
-      global.hosts.push(host);
+      hosts.push(host);
     }
     // Schedule a new set
     workers.doWeaken(2, global.target);
