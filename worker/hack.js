@@ -3,33 +3,15 @@ const noop = () => {};
 
 /** @param {NS} ns */
 export async function mainLoop(ns, workerFunc) {
+  // workerFunc is actually ignored, it is used only for the
+  // static RAM cost.
   if (!globalThis?.global?.workerInfo) {
     // Game was reloaded, workers will get rescheduled
     return;
   }
-  const id = ns.args[0];
-  const info = global.workerInfo[id];
-  try {
-    const bound = workerFunc.bind(ns);
-    info.startTime = performance.now();
-    const promise = bound(info.target, info.opts);
-    // On the side, notify our parent.
-    // The extra noop in the promise chain gives the script time
-    // to exit before the promise resolves in dispatch.js.
-    promise.finally(noop).then(
-      (value) => {
-        info.endTime = performance.now();
-        info.resolve([info, id, value]);
-      },
-      (err) => info.reject(err)
-    );
-    return promise;
-  } catch (err) {
-    // This can lead to double error messages, but it's better
-    // than missing them.
-    info.reject(err);
-    throw err;
-  }
+  const info = global.workerInfo.get(ns.args[0]);
+  // The worker is completely puppeted by the dispatcher.
+  return info.started(ns, info);
 }
 
 /** @param {NS} ns */

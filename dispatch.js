@@ -1,6 +1,7 @@
 // Main dispatch loop. Handles all decision-making logic.
 import { stubCall } from "/lib/stubcall.js";
 import { treeScan, ramDepsUpdate, ServerEntry, PortOpener } from "/lib/scan.js";
+import { Workers } from "/lib/worker.js";
 
 const WORKER_SCRIPTS = [
   "/worker/hack.js",
@@ -8,65 +9,6 @@ const WORKER_SCRIPTS = [
   "/worker/weaken.js",
   "/worker/share.js",
 ];
-
-/** @param {NS} ns */
-function oneHost(ns, host) {
-  const stats = global.dispatchStats;
-  const target = global.target;
-
-  global.serverTree[host].update(ns);
-  global.serverTree[target].update(ns);
-  const hostInfo = global.serverTree[host].server;
-  const targetInfo = global.serverTree[target].server;
-  // Keep some spare space on home for running one-off scripts
-
-  const threads = Math.floor(
-    Math.round(
-      100 * (hostInfo.maxRam - hostInfo.ramUsed) - (host === "home" ? 410 : 0)
-    ) / 175
-  );
-  if (threads < 1) {
-    ns.tprintf("ERROR: Calculated 0 threads for %s", host);
-    return;
-  }
-
-  let method = "hack";
-  if (
-    targetInfo.hackDifficulty - targetInfo.minDifficulty >
-    0.05 * threads * (stats.weaken + 1)
-  ) {
-    method = "weaken";
-  } else if (
-    targetInfo.moneyAvailable / targetInfo.moneyMax <
-    Math.pow(0.75, stats.grow + 1)
-  ) {
-    //ns.tprintf("Grow:%f avail:%f max_money:%f", stats.grow,
-    //    targetInfo.moneyAvailable, targetInfo.moneyMax);
-    method = "grow";
-  }
-  global.workerInfo ??= {};
-  const id = global.workerId++;
-  const info = (global.workerInfo[id] = {
-    target: target,
-    method: method,
-    host: host,
-  });
-  info.promise = new Promise((resolve, reject) => {
-    info.resolve = resolve;
-    info.reject = reject;
-  });
-  stats.hosts ??= {};
-
-  const pid = ns.exec("/worker/" + method + ".js", host, threads, id);
-  if (pid === 0) {
-    throw new Error(
-      "Couldn't launch hack on " + host + " with " + threads + " threads"
-    );
-  }
-  info.pid = pid;
-  stats.hosts[host] = true;
-  stats[method]++;
-}
 
 /** @param {NS} ns */
 function createShares(ns) {
@@ -117,13 +59,43 @@ function hackServers(ns, servers) {
   return targets;
 }
 
-function copyScripts(ns, servers) {
+function copyScripts(ns, parentNs, servers) {
+  // scp is very expensive, because it requires rescanning the files.
+  // We'll use hack.js to check for changes, instead.
+  global.workerInfo ??= new Map();
+  const files = WORKER_SCRIPTS.map((x) => ns.read(x));
+  let numServers = 0;
+  let resolve, reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
   for (const host of servers) {
-    if (host !== "home") {
-      for (const script of WORKER_SCRIPTS) {
-        ns["rm"](script, host);
+    if (host === "home") {
+      continue;
+    }
+    numServers++;
+    const goFunc = (workerNs, info) => {
+      global?.workerInfo?.delete?.(info.id);
+      const workerFiles = workerNs
+        ? WORKER_SCRIPTS.map((x) => workerNs.read(x))
+        : null;
+      for (let i = 0; i < WORKER_SCRIPTS.length; ++i) {
+        if (!workerFiles || workerFiles[i] !== files[i]) {
+          ns["rm"](WORKER_SCRIPTS[i], host);
+          ns["scp"](WORKER_SCRIPTS[i], host, "home");
+        }
       }
-      ns["scp"](WORKER_SCRIPTS, host, "home");
+    };
+    const info = {
+      id: host,
+      started: goFunc,
+    };
+    global.workerInfo.set(host, info);
+    // Use the parent ns for this, it's already paid for exec and we can't
+    // afford it in the stub.
+    if (parentNs["exec"]("/worker/hack.js", host, 1, host) === 0) {
+      goFunc(null, info);
     }
   }
 }
@@ -151,8 +123,7 @@ export async function main(ns) {
   global.workerId = 0;
 
   ns.tprint("Starting");
-  ns.disableLog("disableLog");
-  ns.disableLog("enableLog");
+  ns.disableLog("ALL");
   // Clear space on home
   for (const { filename, pid, args: args_ } of ns.ps()) {
     if (
@@ -178,7 +149,7 @@ export async function main(ns) {
   global.hosts = await stubCall(ns, (ns) => {
     return hackServers(ns, Object.keys(global.serverTree));
   });
-  await stubCall(ns, (ns) => copyScripts(ns, global.hosts));
+  await stubCall(ns, (ns_) => copyScripts(ns_, ns, global.hosts));
 
   createShares(ns);
 
@@ -197,7 +168,8 @@ export async function main(ns) {
   ]);
   const cost_62 = cost_64 - cost_2;
 
-  let numServers = 0;
+  let numServers = 0,
+    numUpgraded = 0;
   for (const host of Object.keys(global.serverTree)) {
     if (host.startsWith("bought-")) {
       numServers++;
@@ -205,6 +177,7 @@ export async function main(ns) {
   }
   const tree = global.serverTree;
   let money = 0;
+  const workers = new Workers(ns, tree);
   while (true) {
     while (money > cost_2 && numServers < serverLimit) {
       const host = "bought-" + numServers;
@@ -219,30 +192,24 @@ export async function main(ns) {
       money -= cost_2;
       global.hosts.push(host);
     }
-    // Run the whole loop every time, in case global.hosts changed
-    for (const host of global.hosts) {
-      if (!stats.hosts[host]) {
-        oneHost(ns, host);
-      }
-    }
-    // Sleep until hack.js wakes us up by calling dispatchResolve.
-    const [info, id, result] = await Promise.race(
-      Object.values(global.workerInfo).map((x) => x.promise)
-    );
-    //await null;
+    // Schedule a new set
+    workers.doWeaken(2, global.target);
+    workers.doGrow(2, global.target);
+    workers.doHack(44, global.target);
 
-    const lastHost = info.host;
-    stats[info.method]--;
-    stats.hosts[lastHost] = null;
-    delete global.workerInfo[id];
+    // Sleep until hack.js wakes us up by calling dispatchResolve.
+    await ns.sleep(100);
 
     money = tree["home"].server.moneyAvailable =
       ns.getServerMoneyAvailable("home");
-    if (money < cost_62 || !lastHost.startsWith("bought-")) continue;
-    if (global.serverTree[lastHost].server.maxRam >= 64) continue;
+    for (; numUpgraded < numServers; numUpgraded++) {
+      if (money < cost_62) break;
+      const upgHost = "bought-" + numUpgraded;
+      if (tree[upgHost].server.maxRam >= 64) continue;
 
-    await stubCall(ns, "upgradePurchasedServer", lastHost, 64);
-    tree[lastHost].server = await stubCall(ns, "getServer", lastHost);
-    money -= cost_62;
+      await stubCall(ns, "upgradePurchasedServer", upgHost, 64);
+      tree[upgHost].server = await stubCall(ns, "getServer", upgHost);
+      money -= cost_62;
+    }
   }
 }
