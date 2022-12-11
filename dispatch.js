@@ -44,10 +44,10 @@ function hackServers(ns, servers) {
   for (const host of servers) {
     const info = global.serverTree[host].server;
     if (!info.hasAdminRights) {
-      if (!opener.canHack(info)) {
+      if (!opener.canRoot(info)) {
         continue;
       }
-      opener.hack(host);
+      opener.root(host);
       global.serverTree[host].server = ns["getServer"](host);
     }
     if (info.maxRam < 1.75) {
@@ -64,44 +64,12 @@ function hackServers(ns, servers) {
   return targets;
 }
 
-function copyScripts(ns, parentNs, servers) {
-  // scp is very expensive, because it requires rescanning the files.
-  // We'll use hack.js to check for changes, instead.
-  global.workerInfo ??= new Map();
-  const files = WORKER_SCRIPTS.map((x) => ns.read(x));
-  let numServers = 0;
-  let resolve, reject;
-  const promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
+function copyScripts(ns, servers) {
   for (const host of servers) {
     if (host === "home") {
       continue;
     }
-    numServers++;
-    const goFunc = (workerNs, info) => {
-      global?.workerInfo?.delete?.(info.id);
-      const workerFiles = workerNs
-        ? WORKER_SCRIPTS.map((x) => workerNs.read(x))
-        : null;
-      for (let i = 0; i < WORKER_SCRIPTS.length; ++i) {
-        if (!workerFiles || workerFiles[i] !== files[i]) {
-          ns["rm"](WORKER_SCRIPTS[i], host);
-          ns["scp"](WORKER_SCRIPTS[i], host, "home");
-        }
-      }
-    };
-    const info = {
-      id: host,
-      started: goFunc,
-    };
-    global.workerInfo.set(host, info);
-    // Use the parent ns for this, it's already paid for exec and we can't
-    // afford it in the stub.
-    if (parentNs["exec"]("/worker/hack.js", host, 1, host) === 0) {
-      goFunc(null, info);
-    }
+    ns["scp"](WORKER_SCRIPTS, host, "home");
   }
 }
 
@@ -130,36 +98,26 @@ export async function main(ns) {
   ns.tprint("Starting");
   ns.disableLog("ALL");
   // Clear space on home
-  for (const { filename, pid, args: args_ } of ns.ps()) {
-    if (
-      filename === "dispatch.js" &&
-      ns.args.length === args_.length &&
-      ns.args.every((x, i) => x === args_[i])
-    ) {
-      continue;
-    }
-    ns.kill(pid);
-  }
+  ns.killall();
   await stubCall(ns, treeScan);
-  await stubCall(ns, (ns) => {
-    for (const host of Object.keys(global.serverTree)) {
-      if (host !== "home") {
-        ns["killall"](host);
-        global.serverTree[host].update(ns);
-      }
+  for (const host of Object.keys(global.serverTree)) {
+    if (host !== "home") {
+      ns.killall(host);
+      global.serverTree[host].update(ns);
     }
-  });
+  }
   // Give the UI a chance to do stuff
   await new Promise((resolve) => setTimeout(resolve));
 
   const hosts = await stubCall(ns, (ns) => {
     return hackServers(ns, Object.keys(global.serverTree));
   });
-  await stubCall(ns, (ns_) => copyScripts(ns_, ns, hosts));
+  await stubCall(ns, (ns_) => copyScripts(ns_, hosts));
 
   createShares(ns, hosts);
 
   global.target = ns.args[1] ?? "n00dles";
+  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 40];
   const [serverLimit, cost_2, cost_64] = await stubCall(ns, (ns) => [
     ns["getPurchasedServerLimit"](),
     ns["getPurchasedServerCost"](2),
@@ -176,7 +134,11 @@ export async function main(ns) {
   }
   const tree = global.serverTree;
   let money = 0;
-  const workers = new Workers(ns, tree);
+
+  const workers = await Workers.init(ns, tree);
+  workers.monitor.displayTail();
+  ns.atExit(() => ns.closeTail());
+
   while (true) {
     while (money > cost_2 && numServers < serverLimit) {
       const host = "bought-" + numServers;
@@ -187,17 +149,18 @@ export async function main(ns) {
         "home",
         1
       );
+      workers.heap.addEntry(tree[host]);
       numServers++;
       money -= cost_2;
       hosts.push(host);
     }
     // Schedule a new set
-    workers.doWeaken(2, global.target);
-    workers.doGrow(2, global.target);
-    workers.doHack(44, global.target);
+    workers.doWeaken(global.threads[0], global.target);
+    workers.doGrow(global.threads[1], global.target);
+    workers.doHack(global.threads[2], global.target);
 
     // Sleep until hack.js wakes us up by calling dispatchResolve.
-    await ns.sleep(100);
+    await ns.asleep(100);
 
     money = tree["home"].server.moneyAvailable =
       ns.getServerMoneyAvailable("home");
@@ -207,7 +170,7 @@ export async function main(ns) {
       if (tree[upgHost].server.maxRam >= 64) continue;
 
       await stubCall(ns, "upgradePurchasedServer", upgHost, 64);
-      tree[upgHost].server = await stubCall(ns, "getServer", upgHost);
+      workers.heap.updateMaxRam(tree[upgHost], 64);
       money -= cost_62;
     }
   }
