@@ -73,33 +73,19 @@ function copyScripts(ns, servers) {
   }
 }
 
-/** @param {NS} ns */
-async function analyze(ns, host) {
-  const serverFortifyAmount = 0.002;
-  const serverWeakenAmount = 0.05;
-  result = {
-    hackAnalyze: await stubCall(ns, "hackAnalyze", host),
-    hackAnalyzeChance: await stubCall(ns, "hackAnalyzeChance", host),
-    growthAnalyze: await stubCall(ns, "growthAnalyze", host),
-    hackTime: await stubCall(ns, "getHackTime", host),
-  };
-  result.growth = Math.exp(1.0 / result["growthAnalyze"]);
-  result.growTime = result.hackTime * 3.2;
-  result.weakenTime = result.hackTime * 4;
-  return result;
-}
-
-/** @param {NS} ns */
-export async function main(ns) {
-  ramDepsUpdate();
-  globalThis.global = {};
-  global.workerId = 0;
-
-  ns.tprint("Starting");
-  ns.disableLog("ALL");
+async function treeInit(ns) {
   // Clear space on home
   ns.killall();
   await stubCall(ns, treeScan);
+  await stubCall(
+    ns,
+    (ns) => (ServerEntry.weakenAnalyze_ = ns["weakenAnalyze"](1))
+  );
+  await stubCall(ns, (ns) => {
+    for (const entry of Object.values(global.serverTree)) {
+      entry.hackStatsUpdate(ns);
+    }
+  });
   for (const host of Object.keys(global.serverTree)) {
     if (host !== "home") {
       ns.killall(host);
@@ -113,7 +99,19 @@ export async function main(ns) {
     return hackServers(ns, Object.keys(global.serverTree));
   });
   await stubCall(ns, (ns_) => copyScripts(ns_, hosts));
+  return hosts;
+}
 
+/** @param {NS} ns */
+export async function main(ns) {
+  ramDepsUpdate();
+  globalThis.global = {};
+  global.workerId = 0;
+
+  ns.tprint("Starting");
+  ns.disableLog("ALL");
+
+  const hosts = await treeInit(ns);
   createShares(ns, hosts);
 
   global.target = ns.args[1] ?? "n00dles";
@@ -154,6 +152,7 @@ export async function main(ns) {
       money -= cost_2;
       hosts.push(host);
     }
+    workers.player.skills.hacking = ns.getHackingLevel();
     // Schedule a new set
     workers.doWeaken(global.threads[0], global.target);
     workers.doGrow(global.threads[1], global.target);
