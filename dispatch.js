@@ -115,7 +115,7 @@ export async function main(ns) {
   createShares(ns, hosts);
 
   global.target = ns.args[1] ?? "n00dles";
-  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 40];
+  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 20];
   const [serverLimit, cost_2, cost_64] = await stubCall(ns, (ns) => [
     ns["getPurchasedServerLimit"](),
     ns["getPurchasedServerCost"](2),
@@ -159,7 +159,7 @@ export async function main(ns) {
     workers.doHack(global.threads[2], global.target);
 
     // Sleep until hack.js wakes us up by calling dispatchResolve.
-    await ns.asleep(100);
+    await ns.asleep(ns.args[5] ?? 25);
 
     money = tree["home"].server.moneyAvailable =
       ns.getServerMoneyAvailable("home");
