@@ -79,14 +79,18 @@ export function analyzeHost(ns, allServerData, person, host) {
 }
 
 export function analyzeTable(ns, allServerData, person) {
+  const servers = [];
   for (const entry of Object.values(allServerData)) {
     const p = getProfitability(entry, person);
     const s = entry.server;
+    if (isNaN(p.profit) || s.requiredHackingSkill > person.skills.hacking) {
+      continue;
+    }
     s.profit = p.profit;
     s.hackTime_ = p.hackTime_;
     s.hackChance_ = p.hackChance_;
+    servers.push(s);
   }
-  const servers = Object.values(allServerData).map((x) => x.server);
   // Sort descending
   servers.sort((a, b) => b.profit - a.profit);
   ns.tprintf(

@@ -11,65 +11,103 @@ const WORKER_SCRIPTS = [
 ];
 
 /** @param {NS} ns */
-function createShares(ns, hosts) {
+function createShares(ns) {
   let shareRam = ns.args[0] ?? 0;
   shareRam -= shareRam % 4;
   shareRam |= 0;
-  const tree = global.serverTree;
-  for (let i = hosts.length - 1; i >= 0; i--) {
-    const host = hosts[i];
-    const server = tree[host].server;
+  for (const entry of Object.values(global.serverTree)) {
+    const server = entry.server;
+    const host = server.hostname;
     if (server.ramUsed) {
       ns.printf("%.2f used ram on %s", server.ramUsed, host);
     }
     const servRam = server.maxRam - server.ramUsed;
     if (shareRam <= 0) break;
-    if (servRam < 4) continue;
+    if (!entry.isUseful() || servRam < 4) continue;
 
     const useRam = Math.min(shareRam, servRam);
     ns.exec("/worker/share.js", host, Math.floor(useRam / 4));
     shareRam -= useRam;
     server.ramUsed += useRam;
-    if (useRam == servRam) {
-      hosts.splice(i, 1);
-    }
   }
 }
 
 /** @param {NS} ns */
-function hackServers(ns, servers) {
-  const targets = [];
-  const opener = new PortOpener(ns);
-  const output = [];
-  for (const host of servers) {
-    const info = global.serverTree[host].server;
-    if (!info.hasAdminRights) {
-      if (!opener.canRoot(info)) {
-        continue;
-      }
-      opener.root(host);
-      global.serverTree[host].server = ns["getServer"](host);
-    }
-    if (info.maxRam < 1.75) {
-      output.push(
-        ns.sprintf("Ignoring %s because it's tiny: %fGB", host, info.maxRam)
-      );
+function hackServers(ns, opener, heap) {
+  let rooted = 0,
+    newRam = 0;
+  opener.ns = ns;
+  for (const entry of Object.values(global.serverTree)) {
+    const info = entry.server;
+    const host = info.hostname;
+    if (info.hasAdminRights || !opener.canRoot(info)) {
       continue;
     }
-    targets.push(host);
+    opener.root(host);
+    entry.server = ns["getServer"](host);
+    heap.addEntry(entry);
+    rooted++;
+    newRam += entry.server.maxRam;
   }
-  if (output.length) {
-    ns.tprintf("%s", output.join("\n"));
-  }
-  return targets;
+  ns.tprintf("Rooted %d new servers totaling %d GB", rooted, newRam);
 }
 
-function copyScripts(ns, servers) {
-  for (const host of servers) {
-    if (host === "home") {
+function copyScripts(ns) {
+  for (const entry of Object.values(global.serverTree)) {
+    const server = entry.server;
+    const host = server.hostname;
+    if (host === "home" || !entry.isUseful()) {
       continue;
     }
     ns["scp"](WORKER_SCRIPTS, host, "home");
+  }
+}
+
+// Polls for stuff the human does, and reacts to it.
+// Although this returns a promise, there's no expectation that anything awaits
+// its result - it won't resolve.
+async function watchHuman(ns, setBuffer, heap) {
+  let opener = { openablePorts: Array(10) };
+  const portCosts = {
+    sshPortOpen: 500e3,
+    ftpPortOpen: 1500e3,
+    smtpPortOpen: 5e6,
+    httpPortOpen: 30e6,
+    sqlPortOpen: 250e6,
+  };
+  while (true) {
+    const newOpener = await stubCall(ns, (ns_) => {
+      // Update in case we bought upgrades
+      global.serverTree["home"].server.maxRam = ns_.getServerMaxRam("home");
+      return new PortOpener(ns_);
+    });
+    if (newOpener.openablePorts.length !== opener.openablePorts.length) {
+      opener = newOpener;
+
+      await stubCall(ns, (ns_) => hackServers(ns_, opener, heap));
+      await stubCall(ns, (ns_) => copyScripts(ns_));
+    }
+    let buffer = Object.values(portCosts).reduce((a, b) => a + b);
+    for (const port of opener.openablePorts) {
+      buffer -= portCosts[port];
+    }
+    if (!global.serverTree["darkweb"]) {
+      const darkweb = await stubCall(ns, (ns_) => {
+        try {
+          return ns_.getServer("darkweb");
+        } catch {
+          return null;
+        }
+      });
+      if (darkweb) {
+        global.serverTree["darkweb"] = new ServerEntry(darkweb, "home", 1);
+      } else {
+        buffer += 200e3;
+      }
+    }
+    setBuffer(buffer);
+
+    await ns.asleep(500);
   }
 }
 
@@ -94,12 +132,6 @@ async function treeInit(ns) {
   }
   // Give the UI a chance to do stuff
   await new Promise((resolve) => setTimeout(resolve));
-
-  const hosts = await stubCall(ns, (ns) => {
-    return hackServers(ns, Object.keys(global.serverTree));
-  });
-  await stubCall(ns, (ns_) => copyScripts(ns_, hosts));
-  return hosts;
 }
 
 /** @param {NS} ns */
@@ -111,36 +143,45 @@ export async function main(ns) {
   ns.tprint("Starting");
   ns.disableLog("ALL");
 
-  const hosts = await treeInit(ns);
-  createShares(ns, hosts);
+  await treeInit(ns);
+  let moneyBuffer = 10e6; // Don't spend money initially
+  let money = -moneyBuffer;
+  const tree = global.serverTree;
 
+  createShares(ns);
   global.target = ns.args[1] ?? "n00dles";
-  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 20];
-  const [serverLimit, cost_2, cost_64] = await stubCall(ns, (ns) => [
-    ns["getPurchasedServerLimit"](),
-    ns["getPurchasedServerCost"](2),
-    ns["getPurchasedServerCost"](64),
-  ]);
-  const cost_62 = cost_64 - cost_2;
+  const workers = await Workers.init(ns, tree);
+  const watch = watchHuman(ns, (x) => (moneyBuffer = x), workers.heap);
 
-  let numServers = 0,
-    numUpgraded = 0;
+  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 20];
+  global.waitTime = ns.args[5] ?? 25;
+  const [serverLimit, serverCosts] = await stubCall(ns, (ns) => {
+    const maxRam = ns["getPurchasedServerMaxRam"]();
+    const costs = [];
+    for (let i = 1; i <= maxRam; i = i << 1) {
+      costs.push(ns["getPurchasedServerCost"](i));
+    }
+    return [ns["getPurchasedServerLimit"](), costs];
+  });
+
+  let numServers = 0;
   for (const host of Object.keys(global.serverTree)) {
     if (host.startsWith("bought-")) {
       numServers++;
     }
   }
-  const tree = global.serverTree;
-  let money = 0;
 
-  const workers = await Workers.init(ns, tree);
   workers.monitor.displayTail();
   ns.atExit(() => ns.closeTail());
 
   while (true) {
-    while (money > cost_2 && numServers < serverLimit) {
+    while (money > serverCosts[1] && numServers < serverLimit) {
       const host = "bought-" + numServers;
-      await stubCall(ns, "purchaseServer", host, 2);
+      if (!(await stubCall(ns, "purchaseServer", host, 2))) {
+        throw new Error(
+          `Failure to purchaseServer: ${host} for ${serverCosts[1]}`
+        );
+      }
       await stubCall(ns, "scp", WORKER_SCRIPTS, host);
       tree[host] = new ServerEntry(
         await stubCall(ns, "getServer", host),
@@ -149,28 +190,43 @@ export async function main(ns) {
       );
       workers.heap.addEntry(tree[host]);
       numServers++;
-      money -= cost_2;
+      money -= serverCosts[1];
       hosts.push(host);
     }
+    // Wait on the watcher, so we catch errors from it.
+    // It won't ever resolve normally.
+    await Promise.race([watch, ns.asleep(global.waitTime)]);
+
     workers.player.skills.hacking = ns.getHackingLevel();
     // Schedule a new set
     workers.doWeaken(global.threads[0], global.target);
     workers.doGrow(global.threads[1], global.target);
     workers.doHack(global.threads[2], global.target);
 
-    // Sleep until hack.js wakes us up by calling dispatchResolve.
-    await ns.asleep(ns.args[5] ?? 25);
+    money =
+      (tree["home"].server.moneyAvailable =
+        ns.getServerMoneyAvailable("home")) - moneyBuffer;
+    for (let i = 0; i < numServers; i++) {
+      const upgHost = "bought-" + i;
+      const entry = tree[upgHost];
+      const upgradeLvl = 31 - Math.clz32(entry.server.maxRam);
+      if (!(money >= serverCosts[upgradeLvl + 1] - serverCosts[upgradeLvl])) {
+        // Inverted test catches NaNs
+        continue;
+      }
 
-    money = tree["home"].server.moneyAvailable =
-      ns.getServerMoneyAvailable("home");
-    for (; numUpgraded < numServers; numUpgraded++) {
-      if (money < cost_62) break;
-      const upgHost = "bought-" + numUpgraded;
-      if (tree[upgHost].server.maxRam >= 64) continue;
-
-      await stubCall(ns, "upgradePurchasedServer", upgHost, 64);
-      workers.heap.updateMaxRam(tree[upgHost], 64);
-      money -= cost_62;
+      if (
+        !(await stubCall(ns, (ns) => {
+          ns.enableLog("upgradePurchasedServer");
+          return ns["upgradePurchasedServer"](upgHost, 1 << (upgradeLvl + 1));
+        }))
+      ) {
+        throw new Error(
+          `Failure to upgradePurchasedServer: ${upgHost} from level ${upgradeLvl}`
+        );
+      }
+      workers.heap.updateMaxRam(entry, 1 << (upgradeLvl + 1));
+      money -= serverCosts[upgradeLvl + 1] - serverCosts[upgradeLvl];
     }
   }
 }
