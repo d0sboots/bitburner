@@ -146,6 +146,7 @@ export async function main(ns) {
   await treeInit(ns);
   let moneyBuffer = 10e6; // Don't spend money initially
   let money = -moneyBuffer;
+  let nextSleep = performance.now();
   const tree = global.serverTree;
 
   createShares(ns);
@@ -195,7 +196,8 @@ export async function main(ns) {
     }
     // Wait on the watcher, so we catch errors from it.
     // It won't ever resolve normally.
-    await Promise.race([watch, ns.asleep(global.waitTime)]);
+    nextSleep += global.waitTime;
+    await Promise.race([watch, ns.asleep(nextSleep - performance.now())]);
 
     workers.player.skills.hacking = ns.getHackingLevel();
     // Schedule a new set
