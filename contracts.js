@@ -2,10 +2,12 @@ import { ServerEntry, scanOnly } from "lib/scan.js";
 import { stubCall } from "lib/stubcall.js";
 import minPathSum from "lib/contracts/min-path-sum.js";
 import arrayJumping from "lib/contracts/array-jumping.js";
+import paths1 from "lib/contracts/paths-in-grid1.js";
 
 const solvers = {
   ["Minimum Path Sum in a Triangle"]: minPathSum,
   ["Array Jumping Game"]: arrayJumping,
+  ["Unique Paths in a Grid I"]: paths1,
 };
 
 async function list(ns) {
