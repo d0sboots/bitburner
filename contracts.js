@@ -59,7 +59,7 @@ async function show(ns, host, file) {
     file,
     ctype,
     desc,
-    data,
+    JSON.stringify(data),
     numTries
   );
 }
