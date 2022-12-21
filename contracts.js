@@ -3,11 +3,15 @@ import { stubCall } from "lib/stubcall.js";
 import minPathSum from "lib/contracts/min-path-sum.js";
 import arrayJumping from "lib/contracts/array-jumping.js";
 import paths1 from "lib/contracts/paths-in-grid1.js";
+import paths2 from "lib/contracts/paths-in-grid2.js";
+import numSum2 from "lib/contracts/num-sum2.js";
 
 const solvers = {
   ["Minimum Path Sum in a Triangle"]: minPathSum,
   ["Array Jumping Game"]: arrayJumping,
   ["Unique Paths in a Grid I"]: paths1,
+  ["Unique Paths in a Grid II"]: paths2,
+  ["Total Ways to Sum II"]: numSum2,
 };
 
 async function list(ns) {
@@ -53,6 +57,7 @@ async function getData(ns, host, file) {
 }
 
 async function show(ns, host, file) {
+  ns.iKnowWhatImDoing();
   const { ctype, desc, data, numTries } = await getData(ns, host, file);
   ns.tprintf(
     "\x1b[37m%s\x1b[0m\n%s\n%s\n%s\n%d tries remaining",
