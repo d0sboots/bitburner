@@ -192,7 +192,6 @@ export async function main(ns) {
       workers.heap.addEntry(tree[host]);
       numServers++;
       money -= serverCosts[1];
-      hosts.push(host);
     }
     // Wait on the watcher, so we catch errors from it.
     // It won't ever resolve normally.

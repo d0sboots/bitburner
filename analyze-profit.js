@@ -13,9 +13,9 @@ import {
  * @param {ServerEntry} entry
  * @returns Object including profit
  */
-export function getProfitability(entry, person) {
+export function getProfitability(ns, entry, person) {
   const s = entry.server;
-  const hackPercent_ = entry.hackPercent_();
+  const hackPercent_ = entry.hackPercent_(ns, person);
   const hackTime_ = entry.hackTime_(person);
   const hackChance_ = entry.hackChance_(person);
   const growthBase = entry.growthBase();
@@ -56,7 +56,7 @@ export function getProfitability(entry, person) {
 export function analyzeHost(ns, allServerData, person, host) {
   const entry = allServerData[host];
   const s = entry.server;
-  const p = getProfitability(entry, person);
+  const p = getProfitability(ns, entry, person);
   const grow1 = Math.ceil(entry.numCycleForGrowthCorrected(0.99));
   const grow99 = Math.ceil(entry.numCycleForGrowthCorrected(0.01));
   const grow100 = Math.ceil(entry.numCycleForGrowthCorrected(0));
@@ -81,7 +81,7 @@ export function analyzeHost(ns, allServerData, person, host) {
 export function analyzeTable(ns, allServerData, person) {
   const servers = [];
   for (const entry of Object.values(allServerData)) {
-    const p = getProfitability(entry, person);
+    const p = getProfitability(ns, entry, person);
     const s = entry.server;
     if (isNaN(p.profit) || s.requiredHackingSkill > person.skills.hacking) {
       continue;
