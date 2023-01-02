@@ -29,8 +29,27 @@ if __name__ == "__main__":
 
     with open("installer.js", "w") as out:
         print("Writing to installer.js...")
-        print("""export function main(ns) {
+        print("""export async function main(ns) {
   const buffer = [];
+  if (ns.args[0] === "-w") {
+    // Wait until change
+    ns.tprintf("Waiting for new installer.js version...");
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      if (ns.ls("home", ns.args[1]).length) {
+        buffer.push("New version of installer.js received!");
+        break;
+      }
+      await ns.asleep(100);
+    }
+    if (Date.now() >= deadline) {
+      ns.tprintf("WARNING: No new installer.js, gave up after 10 seconds.");
+      return;
+    }
+    ns.mv("home", ns.args[1], "installer.js");
+    ns.run("installer.js");
+    return;
+  }
   for (const [path, content] of Object.entries(data)) {
     if (content === ns.read(path)) {
       buffer.push(ns.sprintf("Skipped %s", path));
