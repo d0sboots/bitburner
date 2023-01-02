@@ -8,16 +8,20 @@ compression.
 
 import json
 import os
+import sys
 
 if __name__ == "__main__":
     files = {}
+    wanted = {os.path.join(".", x) for x in sys.argv[1:]}
     for dirpath, dirnames, filenames in os.walk("."):
         if dirpath == ".":
             dirnames.remove("tools")
         for file_ in filenames:
-            if not file_.endswith(".js") or file_ == "installer.js":
+            if not file_.endswith(".js") or file_.endswith("installer.js"):
                 continue
             path = os.path.join(dirpath, file_)
+            if wanted and path not in wanted:
+                continue
             with open(path) as fh:
                 if len(dirpath) == 1:
                     # Root dir files must be bare
@@ -26,6 +30,8 @@ if __name__ == "__main__":
                     # Strip leading dot, keep slash
                     adjpath = path[1:]
                 files[adjpath] = fh.read()
+    if not files:
+        raise ValueError("No files matched args: " + repr(sys.argv[1:]))
 
     with open("installer.js", "w") as out:
         print("Writing to installer.js...")
