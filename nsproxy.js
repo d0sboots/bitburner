@@ -1,6 +1,6 @@
-/** @param {NS} ns */
 export default NSProxy;
 
+/** @param {NS} ns */
 function NSProxy(ns) {
   const memoed = {};
   const handler = {
