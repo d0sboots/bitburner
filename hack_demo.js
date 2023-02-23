@@ -16,6 +16,7 @@ export async function main(ns) {
     port.write(now);
     await port.nextWrite();
     await ns.${wType}(target, { additionalMsec: port.read() });
+    now = performance.now();
   }
 }
     `.trim(),
