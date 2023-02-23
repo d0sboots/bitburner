@@ -24,14 +24,12 @@ export function getProfitability(ns, entry, person) {
   const growPerHack = -Math.log(1 - hackPercent_) / growthBase;
   const weakenPerHack = ((1 + 2 * growPerHack) * 0.002) / 0.05;
   // Fraction of total RAM timeshare spent on hacking.
-  // This doesn't account for the small potential difference between hack
-  // and grow/weaken RAM size.
-  const hackingFraction = 1 / (1 + 3.2 * growPerHack + 4 * weakenPerHack);
+  const hackingFraction = 1.7 / (1.7 + 1.75 * 3.2 * growPerHack + 1.75 * 4 * weakenPerHack);
   // Amount of money/hack, if doing the theoretical optimum of 1 hack at a time.
   const hackMoney = hackPercent_ * s.moneyMax;
 
   const profit =
-    (hackingFraction * hackChance_ * hackMoney) / (hackTime_ * 1.75);
+    (hackingFraction * hackChance_ * hackMoney) / (hackTime_ * 1.7);
   return {
     hackChance_,
     hackPercent_,
