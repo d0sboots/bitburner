@@ -21,7 +21,10 @@ function createShares(ns) {
     if (server.ramUsed) {
       ns.printf("%.2f used ram on %s", server.ramUsed, host);
     }
-    const servRam = server.maxRam - server.ramUsed;
+    let servRam = server.maxRam - server.ramUsed;
+    if (host === "home") {
+      servRam -= 12;
+    }
     if (shareRam <= 0) break;
     if (!entry.isUseful() || servRam < 4) continue;
 

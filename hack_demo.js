@@ -79,7 +79,12 @@ export async function main(ns) {
 
   const launchedTime = performance.now();
 
-  ns.printf("Compiled in %.1fms, Launched %d scripts in %.1fms", compileTime - startTime, WORKERS, launchedTime - compileTime);
+  ns.printf(
+    "Compiled in %.1fms, Launched %d scripts in %.1fms",
+    compileTime - startTime,
+    WORKERS,
+    launchedTime - compileTime
+  );
 
   let first = true;
   while (true) {
@@ -88,15 +93,15 @@ export async function main(ns) {
 
     const loopStart = performance.now();
     if (first === false) {
-      for (let i = 0; i < WORKERS; i+=3) {
+      for (let i = 0; i < WORKERS; i += 3) {
         for (let j = 0; j < 3; ++j) {
-          ports[i+j].write(times[j]);
+          ports[i + j].write(times[j]);
         }
       }
     }
 
     const loopEnd = performance.now();
-    await ports[WORKERS-1].nextWrite();
+    await ports[WORKERS - 1].nextWrite();
     const loop2Start = performance.now();
 
     const firstTime = ports[0].read();
@@ -104,14 +109,21 @@ export async function main(ns) {
     for (let i = 1; i < WORKERS; ++i) {
       const time = ports[i].read();
       if (time < last) {
-        throw new Error(`Script #${i} with pid ${workers[i]} out-of-order: Ran at ${time} when previous script ran at ${last}`);
+        throw new Error(
+          `Script #${i} with pid ${workers[i]} out-of-order: Ran at ${time} when previous script ran at ${last}`
+        );
       }
       last = time;
     }
     const loop2End = performance.now();
     if (!first) {
-      ns.printf("Signaled: %.1fms, Waiting: %.1fms, Running: %.1fms, ReadPort: %.1fms",
-        loopEnd - loopStart, loop2Start - loopEnd, last - firstTime, loop2End - loop2Start);
+      ns.printf(
+        "Signaled: %.1fms, Waiting: %.1fms, Running: %.1fms, ReadPort: %.1fms",
+        loopEnd - loopStart,
+        loop2Start - loopEnd,
+        last - firstTime,
+        loop2End - loop2Start
+      );
     }
     first = false;
   }
