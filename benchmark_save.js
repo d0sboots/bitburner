@@ -33,24 +33,30 @@ export async function main(ns) {
     `
 /** @param {NS} ns */
 export function main(ns) {
+  ns.writePort(ns.args[0], "");
   return ns.asleep(300000);
 }`.trim(),
     "w"
   );
   ns.tprintf("Launching %d copies...", COPIES);
   const beforeLaunch = performance.now();
-  for (let i = 0; i < COPIES; ++i) {
-    ns.run("benchmark_save_helper.js", 1, i);
-  }
   ns.atExit(() => {
     const host = ns.getHostname();
     for (let i = 0; i < COPIES; ++i) {
-      ns.kill("benchmark_save_helper.js", host, i);
+      ns.kill("benchmark_save_helper.js", host, ns.pid, i);
     }
   });
+  const promise = ns.getPortHandle(ns.pid).nextWrite();
+  for (let i = 0; i < COPIES; ++i) {
+    const pid = ns.run("benchmark_save_helper.js", 1, ns.pid, i);
+    if (pid < 1) {
+      ns.tprintf("Failed to launch copy %d, benchmark failed", i);
+      return;
+    }
+  }
   const afterLaunch = performance.now();
   ns.tprintf("Launched in %.3f seconds", 0.001 * (afterLaunch - beforeLaunch));
-  await ns.asleep(0);
+  await promise;
   const afterStart = performance.now();
 
   ns.tprintf(
