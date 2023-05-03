@@ -31,6 +31,15 @@ export function getProfitability(ns, entry, person) {
 
   const profit =
     (hackingFraction * hackChance_ * hackMoney) / (hackTime_ * 1.7);
+
+  const savedDiff = s.hackDifficulty;
+  s.hackDifficulty = entry.recordedHackDifficulty;
+  const lootPercent = entry.hackPercent_(ns, person);
+  const lootTime = entry.hackTime_(person);
+  const lootChance = entry.hackChance_(person);
+  s.hackDifficulty = savedDiff;
+  const loot = (lootChance * lootPercent * s.moneyAvailable) / (lootTime * 1.7);
+
   return {
     hackChance_,
     hackPercent_,
@@ -40,6 +49,7 @@ export function getProfitability(ns, entry, person) {
     weakenPerHack,
     hackingFraction,
     hackMoney,
+    loot,
     profit,
   };
 }
@@ -74,6 +84,7 @@ export function analyzeHost(ns, allServerData, person, host) {
   ns.tprintf("Grows needed/Hack:     %15.3f", p.growPerHack);
   ns.tprintf("Weakens needed/Hack:   %15.3f", p.weakenPerHack);
   ns.tprintf("Hack RAM timeshare:    %15.2f%%", p.hackingFraction * 100);
+  ns.tprintf("Loot $/(GB * sec):     %15.2f", p.loot);
   ns.tprintf("$/(GB * sec):          %15.2f", p.profit);
 }
 
@@ -85,6 +96,7 @@ export function analyzeTable(ns, allServerData, person) {
     if (isNaN(p.profit) || s.requiredHackingSkill > person.skills.hacking) {
       continue;
     }
+    s.loot = p.loot;
     s.profit = p.profit;
     s.hackTime_ = p.hackTime_;
     s.hackChance_ = p.hackChance_;
@@ -93,20 +105,21 @@ export function analyzeTable(ns, allServerData, person) {
   // Sort descending
   servers.sort((a, b) => b.profit - a.profit);
   ns.tprintf(
-    "          Hostname │ Skill │ Security │ Chance │ Hack Time │ $/(GB * sec)"
+    "          Hostname │ Skill │ Security │ Chance │ Hack Time │ Loot $/GB*s │ $/(GB * sec)"
   );
   ns.tprintf(
-    "───────────────────┼───────┼──────────┼────────┼───────────┼─────────────"
+    "───────────────────┼───────┼──────────┼────────┼───────────┼─────────────┼─────────────"
   );
   for (const s of servers) {
     if (s.profit === 0) continue;
     ns.tprintf(
-      "%18s │%6d │%9d │%6.2f%% │%10.3f │%13.2f",
+      "%18s │%6d │%9d │%6.2f%% │%10.3f │%13.2f│%13.2f",
       s.hostname,
       s.requiredHackingSkill,
       s.minDifficulty,
       s.hackChance_ * 100,
       s.hackTime_,
+      s.loot,
       s.profit
     );
   }
