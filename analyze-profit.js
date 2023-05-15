@@ -55,6 +55,13 @@ export function getProfitability(ns, entry, person) {
 }
 
 /**
+ * @param {ServerEntry} entry
+ * @returns Object including profit
+ */
+function hwgw(entry, person) {
+}
+
+/**
  * @param {NS} ns
  * @param {Object.<string, ServerEntry>} allServerData
  * @param {string} host

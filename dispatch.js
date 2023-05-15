@@ -3,12 +3,7 @@ import { stubCall } from "/lib/stubcall.js";
 import { treeScan, ramDepsUpdate, ServerEntry, PortOpener } from "/lib/scan.js";
 import { Workers } from "/lib/worker.js";
 
-const WORKER_SCRIPTS = [
-  "/worker/hack.js",
-  "/worker/grow.js",
-  "/worker/weaken.js",
-  "/worker/share.js",
-];
+const WORKER_SCRIPTS = ["/worker/worker.js", "/worker/share.js"];
 
 /** @param {NS} ns */
 function createShares(ns) {
@@ -81,7 +76,7 @@ async function watchHuman(ns, setBuffer, heap) {
   while (true) {
     const newOpener = await stubCall(ns, (ns_) => {
       // Update in case we bought upgrades
-      global.serverTree["home"].server.maxRam = ns_.getServerMaxRam("home");
+      global.serverTree["home"].server.maxRam = ns_["getServerMaxRam"]("home");
       return new PortOpener(ns_);
     });
     if (newOpener.openablePorts.length !== opener.openablePorts.length) {
@@ -97,7 +92,7 @@ async function watchHuman(ns, setBuffer, heap) {
     if (!global.serverTree["darkweb"]) {
       const darkweb = await stubCall(ns, (ns_) => {
         try {
-          return ns_.getServer("darkweb");
+          return ns_["getServer"]("darkweb");
         } catch {
           return null;
         }
@@ -122,17 +117,17 @@ async function treeInit(ns) {
     ns,
     (ns) => (ServerEntry.weakenAnalyze_ = ns["weakenAnalyze"](1))
   );
-  await stubCall(ns, (ns) => {
-    for (const entry of Object.values(global.serverTree)) {
-      entry.hackStatsUpdate(ns);
-    }
-  });
   for (const host of Object.keys(global.serverTree)) {
     if (host !== "home") {
       ns.killall(host);
-      global.serverTree[host].update(ns);
     }
   }
+  await stubCall(ns, (ns) => {
+    for (const [host, entry] of Object.entries(global.serverTree)) {
+      entry.hackStatsUpdate(ns);
+      global.serverTree[host].update(ns);
+    }
+  });
   // Give the UI a chance to do stuff
   await new Promise((resolve) => setTimeout(resolve));
 }
@@ -143,7 +138,6 @@ export async function main(ns) {
   globalThis.global = {};
   global.workerId = 0;
 
-  ns.tprint("Starting");
   ns.disableLog("ALL");
 
   await treeInit(ns);
