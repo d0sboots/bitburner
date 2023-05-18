@@ -58,7 +58,34 @@ export function getProfitability(ns, entry, person) {
  * @param {ServerEntry} entry
  * @returns Object including profit
  */
-function hwgw(entry, person) {
+function hwgw(ns, entry, person, hackThreads) {
+  const s = entry.server;
+  const hackPercent_ = entry.hackPercent_(ns, person);
+  const steal = s.moneyMax * Math.min(1.0, hackPercent_ * hackThreads);
+  const hackChance_ = entry.hackChance_(person);
+  // Number of grows/weakens required per hack. This assumes full coverage even when hackPercent is < 1.
+  // (This assumption is not strictly optimal, but is how most practical scripts work.)
+  const growThreads = Math.ceil(
+    entry.numCycleForGrowthCorrected(s.moneyMax - steal)
+  );
+  const weaken1Threads = Math.ceil(hackThreads * (0.002 / 0.05));
+  const weaken2Threads = Math.ceil(growThreads * (0.004 / 0.05));
+  const ramPerBatch =
+    1.7 * 0.25 * hackThreads +
+    1.75 * 0.8 * growThreads +
+    1.75 * (weaken1Threads + weaken2Threads);
+  const profitPerBatch = steal * hackChance_;
+  const profitPerGB = profitPerBatch / ramPerBatch;
+
+  return {
+    hackThreads,
+    weaken1Threads,
+    growThreads,
+    weaken2Threads,
+    ramPerBatch,
+    profitPerBatch,
+    profitPerGB,
+  };
 }
 
 /**
@@ -76,6 +103,8 @@ export function analyzeHost(ns, allServerData, person, host) {
   const grow1 = Math.ceil(entry.numCycleForGrowthCorrected(0.99));
   const grow99 = Math.ceil(entry.numCycleForGrowthCorrected(0.01));
   const grow100 = Math.ceil(entry.numCycleForGrowthCorrected(0));
+  const hwgw_res = hwgw(ns, entry, person, 10);
+  const hwgw_str = `${hwgw_res.hackThreads}/${hwgw_res.weaken1Threads}/${hwgw_res.growThreads}/${hwgw_res.weaken2Threads}`;
   ns.tprintf("Analysis of %s:", s.hostname);
   ns.tprintf("Max Money:             %15d", s.moneyMax);
   ns.tprintf("Hacking Skill Required:%15d", s.requiredHackingSkill);
@@ -84,6 +113,7 @@ export function analyzeHost(ns, allServerData, person, host) {
   ns.tprintf("  1%% grow threads:     %15d", grow1);
   ns.tprintf(" 99%% grow threads:     %15d", grow99);
   ns.tprintf("100%% grow threads:     %15d", grow100);
+  ns.tprintf("HWGW (10)              %15s", hwgw_str);
   ns.tprintf("Hacking time (sec)     %15.3f", p.hackTime_);
   ns.tprintf("Hacking Chance:        %15.2f%%", p.hackChance_ * 100);
   ns.tprintf("Money per Hack Success:%15.0f", p.hackMoney);
