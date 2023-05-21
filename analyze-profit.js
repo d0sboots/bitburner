@@ -100,9 +100,9 @@ export function analyzeHost(ns, allServerData, person, host) {
   const entry = allServerData[host];
   const s = entry.server;
   const p = getProfitability(ns, entry, person);
-  const grow1 = Math.ceil(entry.numCycleForGrowthCorrected(0.99));
-  const grow99 = Math.ceil(entry.numCycleForGrowthCorrected(0.01));
-  const grow100 = Math.ceil(entry.numCycleForGrowthCorrected(0));
+  const grow1 = entry.numCycleForGrowthCorrected(0.99 * s.moneyMax, 0, 0.01);
+  const grow99 = entry.numCycleForGrowthCorrected(0.01 * s.moneyMax, 0, 0.01);
+  const grow100 = entry.numCycleForGrowthCorrected(0, 0, 0.01);
   const hwgw_res = hwgw(ns, entry, person, 10);
   const hwgw_str = `${hwgw_res.hackThreads}/${hwgw_res.weaken1Threads}/${hwgw_res.growThreads}/${hwgw_res.weaken2Threads}`;
   ns.tprintf("Analysis of %s:", s.hostname);
@@ -110,9 +110,9 @@ export function analyzeHost(ns, allServerData, person, host) {
   ns.tprintf("Hacking Skill Required:%15d", s.requiredHackingSkill);
   ns.tprintf("Min Security Level:    %15d", s.minDifficulty);
   ns.tprintf("Server Growth Rate:    %15d", s.serverGrowth);
-  ns.tprintf("  1%% grow threads:     %15d", grow1);
-  ns.tprintf(" 99%% grow threads:     %15d", grow99);
-  ns.tprintf("100%% grow threads:     %15d", grow100);
+  ns.tprintf("  1%% grow threads:     %15.2f", grow1);
+  ns.tprintf(" 99%% grow threads:     %15.2f", grow99);
+  ns.tprintf("100%% grow threads:     %15.2f", grow100);
   ns.tprintf("HWGW (10)              %15s", hwgw_str);
   ns.tprintf("Hacking time (sec)     %15.3f", p.hackTime_);
   ns.tprintf("Hacking Chance:        %15.2f%%", p.hackChance_ * 100);
