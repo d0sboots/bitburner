@@ -76,7 +76,10 @@ async function watchHuman(ns, setBuffer, heap) {
   while (true) {
     const newOpener = await stubCall(ns, (ns_) => {
       // Update in case we bought upgrades
-      global.serverTree["home"].server.maxRam = ns_["getServerMaxRam"]("home");
+      heap.updateMaxRam(
+        global.serverTree["home"],
+        ns_["getServerMaxRam"]("home")
+      );
       return new PortOpener(ns_);
     });
     if (newOpener.openablePorts.length !== opener.openablePorts.length) {
@@ -141,18 +144,27 @@ export async function main(ns) {
   ns.disableLog("ALL");
 
   await treeInit(ns);
+  createShares(ns);
+
+  global.target = ns.args[1] ?? "n00dles";
+  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 20];
+  global.waitTime = ns.args[5] ?? 25;
+
   let moneyBuffer = 10e6; // Don't spend money initially
-  let money = -moneyBuffer;
+  const workers = await Workers.init(ns, global.serverTree);
+  const watch = watchHuman(ns, (x) => (moneyBuffer = x), workers.heap);
+  workers.monitor.displayTail();
+  ns.atExit(() => ns.closeTail());
+
+  return Promise.race([mainloop(ns, workers, () => moneyBuffer), watch]);
+}
+
+/** @param {NS} ns */
+async function mainloop(ns, workers, getMoneyBuffer) {
+  let money = -getMoneyBuffer();
   let nextSleep = performance.now();
   const tree = global.serverTree;
 
-  createShares(ns);
-  global.target = ns.args[1] ?? "n00dles";
-  const workers = await Workers.init(ns, tree);
-  const watch = watchHuman(ns, (x) => (moneyBuffer = x), workers.heap);
-
-  global.threads = [ns.args[2] ?? 3, ns.args[3] ?? 3, ns.args[4] ?? 20];
-  global.waitTime = ns.args[5] ?? 25;
   const [serverLimit, serverCosts] = await stubCall(ns, (ns) => {
     const maxRam = ns["getPurchasedServerMaxRam"]();
     const costs = [];
@@ -168,9 +180,6 @@ export async function main(ns) {
       numServers++;
     }
   }
-
-  workers.monitor.displayTail();
-  ns.atExit(() => ns.closeTail());
 
   while (true) {
     while (money > serverCosts[1] && numServers < serverLimit) {
@@ -193,7 +202,7 @@ export async function main(ns) {
     // Wait on the watcher, so we catch errors from it.
     // It won't ever resolve normally.
     nextSleep += global.waitTime;
-    await Promise.race([watch, ns.asleep(nextSleep - performance.now())]);
+    await ns.asleep(nextSleep - performance.now());
 
     workers.player.skills.hacking = ns.getHackingLevel();
     // Schedule a new set
@@ -203,7 +212,7 @@ export async function main(ns) {
 
     money =
       (tree["home"].server.moneyAvailable =
-        ns.getServerMoneyAvailable("home")) - moneyBuffer;
+        ns.getServerMoneyAvailable("home")) - getMoneyBuffer();
     for (let i = 0; i < numServers; i++) {
       const upgHost = "bought-" + i;
       const entry = tree[upgHost];
