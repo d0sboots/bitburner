@@ -135,25 +135,29 @@ class RunInBackground {
       const props = args[1];
       if (
         typeof fn !== "function" ||
-        fn.name !== "GameOptionsPage" ||
         props === null ||
         typeof props !== "object" ||
-        props.title !== "System"
+        props.title !== "System" ||
+        !String(fn).includes('height:"fit-content"')
       ) {
         return orig.call(this, ...args);
       }
       if (_this.OptionSwitch === null) {
-        for (let i = 2; i < args.length; ++i) {
+        let i = 2;
+        for (; i < args.length; ++i) {
           const child = args[i];
           if (
             child !== null &&
             typeof child === "object" &&
             typeof child.type === "function" &&
-            child.type.name === "OptionSwitch"
+            String(child.type).includes(".target.checked")
           ) {
             _this.OptionSwitch = child.type;
             break;
           }
+        }
+        if (i >= args.length) {
+          _this.workerScript.print("Unable to find OptionSwitch!");
         }
       }
       // Add our option to the end of the children
