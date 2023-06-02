@@ -16,6 +16,8 @@ if __name__ == "__main__":
     for dirpath, dirnames, filenames in os.walk("."):
         if dirpath == ".":
             dirnames.remove("tools")
+            dirnames.remove("node_modules")
+            dirnames.remove("test")
         for file_ in filenames:
             if not file_.endswith(".js") or file_.endswith("installer.js"):
                 continue
