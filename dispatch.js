@@ -127,7 +127,6 @@ async function treeInit(ns) {
   }
   await stubCall(ns, (ns) => {
     for (const [host, entry] of Object.entries(global.serverTree)) {
-      entry.hackStatsUpdate(ns);
       global.serverTree[host].update(ns);
     }
   });
