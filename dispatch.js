@@ -23,10 +23,10 @@ function createShares(ns) {
     if (shareRam <= 0) break;
     if (!entry.isUseful() || servRam < 4) continue;
 
-    const useRam = Math.min(shareRam, servRam);
-    ns.exec("/worker/share.js", host, Math.floor(useRam / 4));
-    shareRam -= useRam;
-    server.ramUsed += useRam;
+    const useThreads = Math.floor(Math.min(shareRam, servRam) / 4);
+    ns.exec("/worker/share.js", host, useThreads)
+    shareRam -= useThreads * 4;
+    server.ramUsed += useThreads * 4;
   }
 }
 
