@@ -1,21 +1,38 @@
 // Dynamic dispatch for functions that cost less than 20GB.
 // The limit is set by using ramOverride.
 
+// All calls become async, but in the common case execution
+// will return immediately to your script after the stub call is finished,
+// without other scripts having a chance to interfere.
+
+// Usage (note the use of corp["functionName"] to avoid
+// the static RAM cost in the main controller script):
+//
+// import { corpProxy } from "corpcall.js";
+// const corp = corpProxy(ns);
+// await corp["throwParty"](divison, "Aevum", 420000);
+// const office = await corp["getOffice"](divison, "Aevum");
+
+/**
+ * @param {NS} ns
+ * @returns A proxy that uses RAM-dodging for all corp calls
+ */
+export function corpProxy(ns) {
+  // Credit to DarkTechnomancer for the Proxy idea/impl
+  return new Proxy(ns.corporation, {
+    get(_, functionName) {
+      return (...args) => {
+        return stubCall(ns, ns2 => ns2.corporation[functionName](...args));
+      };
+    },
+  });
+}
+
 // This takes a function as an argument, which will be executed in a "stub"
 // script for RAM-saving reasons. The first argument to the function is
 // the `ns` instance.
 // **It is very important** that you use this argument to execute your calls,
 // otherwise you will achieve no ram saving!
-
-// All calls become async, but in the common case execution
-// will return immediately to your script after the stub call is finished,
-// without other scripts having a chance to interfere.
-
-// Usage:
-//
-// import { stubCall } from "corpcall.js";
-// await stubCall(ns, ns => ns.corp.throwParty(divison, "Aevum", 420000));
-// const office = await stubCall(ns, ns => ns.corp.getOffice(divison, "Aevum"));
 
 /**
  * @callback stubCallback
