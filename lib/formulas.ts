@@ -791,11 +791,7 @@ export class Formulas {
    * @param {BitNodeMultipliers} bnMults
    */
   constructor(bnMults: BitNodeMultipliers) {
-    if (
-      bnMults === null ||
-      typeof bnMults !== "object" ||
-      !("ScriptHackMoney" in bnMults)
-    ) {
+    if (bnMults === null || typeof bnMults !== "object" || !("ScriptHackMoney" in bnMults)) {
       throw new Error(`bnMults is not a valid BN mults object: ${bnMults}`);
     }
     this.extra = new Extra(bnMults);
@@ -894,11 +890,7 @@ class Reputation {
   repFromDonation(_amount: unknown, _player: unknown): number {
     const amount = helpers.number("amount", _amount);
     const person = helpers.person(_player);
-    return (
-      (amount / CONSTANTS.DonateMoneyToRepDivisor) *
-      person.mults.faction_rep *
-      this.bnMults.FactionWorkRepGain
-    );
+    return (amount / CONSTANTS.DonateMoneyToRepDivisor) * person.mults.faction_rep * this.bnMults.FactionWorkRepGain;
   }
 }
 
@@ -968,9 +960,7 @@ class Hacking {
     const diffFactor = 0.3;
     let expGain = baseExpGain;
     expGain += baseDifficulty * diffFactor;
-    return (
-      expGain * person.mults.hacking_exp * this.bnMults.HackExpGain
-    );
+    return expGain * person.mults.hacking_exp * this.bnMults.HackExpGain;
   }
 
   hackPercent(_server: unknown, _player: unknown): number {
@@ -984,15 +974,9 @@ class Hacking {
     const balanceFactor = 240;
 
     const difficultyMult = (100 - hackDifficulty) / 100;
-    const skillMult =
-      (person.skills.hacking - (requiredHackingSkill - 1)) /
-      person.skills.hacking;
+    const skillMult = (person.skills.hacking - (requiredHackingSkill - 1)) / person.skills.hacking;
     const percentMoneyHacked =
-      (difficultyMult *
-        skillMult *
-        person.mults.hacking_money *
-        this.bnMults.ScriptHackMoney) /
-      balanceFactor;
+      (difficultyMult * skillMult * person.mults.hacking_money * this.bnMults.ScriptHackMoney) / balanceFactor;
 
     return Math.min(1, Math.max(percentMoneyHacked, 0));
   }
@@ -1013,10 +997,7 @@ class Hacking {
     const server = helpers.server(_server);
     const person = helpers.person(_player);
     let targetMoney = helpers.number("targetMoney", _targetMoney);
-    let startMoney = helpers.number(
-      "server.moneyAvailable",
-      server.moneyAvailable
-    );
+    let startMoney = helpers.number("server.moneyAvailable", server.moneyAvailable);
     const cores = helpers.number("cores", _cores);
 
     if (!server.serverGrowth) return Infinity;
@@ -1094,11 +1075,9 @@ class Hacking {
       diff = newx - x;
       x = newx;
     } while (diff < -1 || diff > 1);
-    /* If we see a diff of 1 or less we know all future diffs will be smaller, and the rate of
-     * convergence means the *sum* of the diffs will be less than 1.
-
-     * In most cases, our result here will be ceil(x).
-     */
+    // If we see a diff of 1 or less we know all future diffs will be smaller, and the rate of
+    // convergence means the *sum* of the diffs will be less than 1.
+    // In most cases, our result here will be ceil(x).
     const ccycle = Math.ceil(x);
     if (ccycle - x > 0.999999) {
       // Rounding-error path: It's possible that we slightly overshot the integer value due to
@@ -1187,7 +1166,7 @@ class Work {}
 
 /** Extra functions that calculate useful things. */
 class Extra {
-  bnMults: BitNodeMultipliers
+  bnMults: BitNodeMultipliers;
 
   /**
    * @param {BitNodeMultipliers} bnMults
@@ -1435,10 +1414,7 @@ const helpers = {
       if (isNaN(v)) throw makeRuntimeErrorMsg(`'${argName}' is NaN.`);
       return v;
     }
-    throw makeRuntimeErrorMsg(
-      `'${argName}' should be a number. ${debugType(v)}`,
-      "TYPE"
-    );
+    throw makeRuntimeErrorMsg(`'${argName}' should be a number. ${debugType(v)}`, "TYPE");
   },
   string(argName: string, v: unknown): string {
     if (typeof v === "number") v = v + ""; // cast to string;
@@ -1736,10 +1712,7 @@ function isValidNumber(n: number): boolean {
 
 function assertString(argName: string, v: unknown): asserts v is string {
   if (typeof v !== "string") {
-    throw makeRuntimeErrorMsg(
-      `${argName} expected to be a string. ${debugType(v)}`,
-      "TYPE"
-    );
+    throw makeRuntimeErrorMsg(`${argName} expected to be a string. ${debugType(v)}`, "TYPE");
   }
 }
 
@@ -1762,9 +1735,7 @@ function debugType(v: unknown): string {
 
 function missingKey(expect: object, actual: unknown): string | false {
   if (typeof actual !== "object" || actual === null) {
-    return `Expected to be an object, was ${
-      actual === null ? "null" : typeof actual
-    }.`;
+    return `Expected to be an object, was ${actual === null ? "null" : typeof actual}.`;
   }
   for (const key in expect) {
     if (!(key in actual)) {
@@ -1818,8 +1789,7 @@ function calculateHackingTime(server: Server, person: Person): number {
   const hackTimeMultiplier = 5;
   const hackingTime =
     (hackTimeMultiplier * skillFactor) /
-    (person.mults.hacking_speed *
-      calculateIntelligenceBonus(person.skills.intelligence, 1));
+    (person.mults.hacking_speed * calculateIntelligenceBonus(person.skills.intelligence, 1));
 
   return hackingTime;
 }

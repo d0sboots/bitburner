@@ -5,6 +5,10 @@
     "verbatimModuleSyntax": true,
     "jsx": "preserve",
     "strict": true,
-    "target": "ESNext"
-  }
+    "target": "ESNext",
+    "rootDir": "tmp",
+    "outDir": "."
+  },
+  "include": ["tmp/**/*"],
+  "exclude": []
 }
