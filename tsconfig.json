@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "verbatimModuleSyntax": true,
+    "jsx": "preserve",
+    "strict": true,
+    "target": "ESNext"
+  }
+}
