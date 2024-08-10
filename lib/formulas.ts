@@ -1335,6 +1335,27 @@ class Extra {
         t = newt;
       } while (diff < -thresh || diff > thresh);
       return t;
+    } else {
+      const c_grow = -this.calculateServerGrowthLog(server, 1, person, cores);
+      const requiredHackingSkill = server.requiredHackingSkill ?? 1e9;
+      const skillMult = (person.skills.hacking - (requiredHackingSkill - 1)) / person.skills.hacking;
+      const c_pmh = (skillMult * person.mults.hacking_money * this.bnMults.ScriptHackMoney) / 6000000;
+      const k1 = 25000 - 250 * (server.hackDifficulty - fortify);
+      const invmon = 1 / server.moneyMax;
+      let t = guess;
+      let diff, thresh;
+      do {
+        const linear = threadConstant + threadMultiplier * t;
+        const exp = Math.expm1(c_grow * t);
+        const pmh = c_pmh * (k1 - t);
+        const y = exp + linear * pmh - t * invmon;
+        const yp = c_grow * (exp + 1) - linear * c_pmh - invmon + threadMultiplier * pmh;
+        const newt = t - y / yp;
+        diff = newt - t;
+        thresh = t * relError;
+        t = newt;
+      } while (diff < -thresh || diff > thresh);
+      return t;
     }
     return 0;
   }
