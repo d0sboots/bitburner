@@ -47,7 +47,7 @@ export function createCurrentFormulasNoRam(ns: NS): Formulas {
  */
 export function getBn12SfLevel(ns: NS): number {
   ns.getServerRequiredHackingLevel;
-  return getBn12SfLevel(ns);
+  return getBn12SfLevelNoRam(ns);
 }
 
 /**
