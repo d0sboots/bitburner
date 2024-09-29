@@ -50,13 +50,57 @@ describe("Formulas.Hacking", function () {
         threadConstant: 50,
         relError: 1e-10,
       };
-      const h_threads = extra.calculateBatchThreads(opts);
+      const {hack, grow} = extra.calculateBatchThreads(opts);
+      expect(grow).is.within(50 - 1e-6, 50 + 1e-6);
+
       const pmh = hacking.hackPercent(server, person);
-      server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * h_threads;
-      server.hackDifficulty += 0.002 * h_threads;
+      server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
+      server.hackDifficulty += 0.002 * hack;
       expect(hacking.growAmount(server, person, 49.99999)).is.below(server.moneyMax);
       expect(hacking.growAmount(server, person, 50)).is.within(server.moneyMax - 1e-4, server.moneyMax);
     });
+
+    it("fixed g, hackDifficulty below cutoff of formula change", function () {
+      const server = formulas.mockServer();
+      Object.assign(server, {
+        moneyMax:100,
+        moneyAvailable:0,
+        serverGrowth:30,
+        baseDifficulty:15,
+        hackDifficulty:5,
+        minDifficulty:5,
+        requiredHackingSkill:80,
+      });
+      console.log(server.hackDifficulty);
+
+      const person = formulas.mockPerson();
+      Object.assign(person, {
+        skills:{hacking:475},
+        mults:{
+          hacking_money:3,
+          hacking_grow:3,
+        },
+      });
+      const g_threads = 35;
+
+      const opts = {
+        batchType: "hgw",
+        server,
+        person,
+        threadConstant: g_threads,
+        relError: 1e-10,
+      };
+
+      const {hack, grow} = extra.calculateBatchThreads(opts);
+      expect(grow).is.within(35 - 1e-6, 35 + 1e-6);
+
+      const pmh = hacking.hackPercent(server, person);
+      server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
+      server.hackDifficulty += 0.002 * hack;
+
+      expect(hacking.growAmount(server, person, g_threads - 1e-5)).is.below(server.moneyMax);
+      expect(hacking.growAmount(server, person, g_threads)).is.within(server.moneyMax - 1e-4, server.moneyMax);
+    })
 
     it("hgw, fixed w", function () {
       const server = formulas.mockServer();
@@ -78,15 +122,15 @@ describe("Formulas.Hacking", function () {
         threadConstant: 100,
         threadMultiplier: -0.5,
         relError: 1e-10,
-        fortify: 0.2,
+        weaken: 0.2,
       };
-      const h_threads = extra.calculateBatchThreads(opts);
-      const g_threads = 100 - 0.5 * h_threads;
+      const {hack, grow} = extra.calculateBatchThreads(opts);
+
       const pmh = hacking.hackPercent(server, person);
-      server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * h_threads;
-      server.hackDifficulty += 0.002 * h_threads - opts.fortify;
-      expect(hacking.growAmount(server, person, g_threads - 1e-5)).is.below(server.moneyMax);
-      expect(hacking.growAmount(server, person, g_threads)).is.within(server.moneyMax - 1e-4, server.moneyMax);
+      server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
+      server.hackDifficulty += 0.002 * hack - opts.weaken;
+      expect(hacking.growAmount(server, person, grow - 1e-5)).is.below(server.moneyMax);
+      expect(hacking.growAmount(server, person, grow)).is.within(server.moneyMax - 1e-4, server.moneyMax);
     });
 
     it("ghw, fixed h", function () {
@@ -109,10 +153,12 @@ describe("Formulas.Hacking", function () {
         threadConstant: 50,
         relError: 1e-10,
       };
-      const g_threads = extra.calculateBatchThreads(opts);
-      const mul = extra.calculateServerGrowth(server, g_threads, person);
-      const drained = server.moneyMax - (server.moneyMax / mul - g_threads);
-      server.hackDifficulty += 0.004 * g_threads;
+      const {hack, grow} = extra.calculateBatchThreads(opts);
+      expect(hack).is.within(50 - 1e-6, 50 + 1e-6);
+
+      const mul = extra.calculateServerGrowth(server, grow, person);
+      const drained = server.moneyMax - (server.moneyMax / mul - grow);
+      server.hackDifficulty += 0.004 * grow;
       const pmh = hacking.hackPercent(server, person);
       expect(server.moneyMax * pmh * (opts.threadConstant - 1e-5)).is.below(drained);
       expect(server.moneyMax * pmh * opts.threadConstant).is.within(drained - 1e-4, drained + 1e-4);
@@ -138,16 +184,15 @@ describe("Formulas.Hacking", function () {
         threadConstant: 100,
         threadMultiplier: -2,
         relError: 1e-10,
-        fortify: 0.2,
+        weaken: 0.2,
       };
-      const g_threads = extra.calculateBatchThreads(opts);
-      const h_threads = 100 - 2 * g_threads;
-      const mul = extra.calculateServerGrowth(server, g_threads, person);
-      const drained = server.moneyMax - (server.moneyMax / mul - g_threads);
-      server.hackDifficulty += 0.004 * g_threads - opts.fortify;
+      const {hack, grow} = extra.calculateBatchThreads(opts);
+      const mul = extra.calculateServerGrowth(server, grow, person);
+      const drained = server.moneyMax - (server.moneyMax / mul - grow);
+      server.hackDifficulty += 0.004 * grow - opts.weaken;
       const pmh = hacking.hackPercent(server, person);
-      expect(server.moneyMax * pmh * (h_threads - 1e-5)).is.below(drained);
-      expect(server.moneyMax * pmh * h_threads).is.within(drained - 1e-4, drained + 1e-4);
+      expect(server.moneyMax * pmh * (hack - 1e-5)).is.below(drained);
+      expect(server.moneyMax * pmh * hack).is.within(drained - 1e-4, drained + 1e-4);
     });
   });
 });
