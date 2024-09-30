@@ -71,7 +71,6 @@ describe("Formulas.Hacking", function () {
         minDifficulty:5,
         requiredHackingSkill:80,
       });
-      console.log(server.hackDifficulty);
 
       const person = formulas.mockPerson();
       Object.assign(person, {
