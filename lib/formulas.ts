@@ -1243,7 +1243,8 @@ class Extra {
    * @typedef BatchThreadsOpts
    * @type {object}
    * @property {string} batchType - "hgw" or "ghw"
-   * @property {Server} server - server to use for calculations
+   * @property {Server} server - server to use for calculations. moneyMax and minDifficulty are the relevant stats,
+   *                             *not* moneyAvailable and hackDifficulty
    * @property {Person} person - the person/player to use for stats
    * @property {number} threadConstant - the constant part of the linear constraint, see below
    * @property {?number} threadMultiplier - the multiplier part of the linear constaint, defaults to 0
@@ -1295,12 +1296,13 @@ class Extra {
    * by calculating the effect of the hacks, determining the necessary grows with growThreadsFractional(),
    * and then determining the needed weakens.
    */
-  calculateBatchThreads(options: { [x in keyof BatchThreadsOpts]: unknown }): {hack: number, grow: number} {
+  calculateBatchThreads(options: { [x in keyof BatchThreadsOpts]: unknown }): { hack: number; grow: number } {
     if (options.batchType !== "hgw" && options.batchType !== "ghw") {
       throw makeRuntimeErrorMsg(`batchType must be hgw or ghw, was ${options.batchType}`);
     }
     const hgw = options.batchType === "hgw";
-    const server = helpers.server(options.server);
+    // Make a copy of server, because we have to tweak it.
+    const server = { ...helpers.server(options.server) };
     const person = helpers.person(options.person);
     const threadConstant = helpers.number("threadConstant", options.threadConstant);
     const threadMultiplier = helpers.number("threadMultiplier", options.threadMultiplier ?? 0);
@@ -1315,9 +1317,12 @@ class Extra {
     if (!server.moneyMax) {
       throw makeRuntimeErrorMsg(`server ${server.hostname} can't store money`);
     }
-    if (!server.hackDifficulty) {
+    if (!server.minDifficulty) {
       throw makeRuntimeErrorMsg(`server ${server.hostname} can't be hacked`);
     }
+    // We use minDifficulty for the API, but internally some of our helper
+    // functions calculate with hackDifficulty.
+    server.hackDifficulty = server.minDifficulty;
     // These formulas use Newton's method to quickly estimate the correct solution to the problem.
     // Common elements of both include using "t" for the answer that we are refining (which starts
     // at "guess"), "newt" is the new value of "t", "diff" is the difference between the current and
@@ -1339,16 +1344,16 @@ class Extra {
     //  - money is the final grown money (i.e. moneyMax)
     //
     //  prev_money = money - drain = money - money * c_pmh * h_threads
-    //  final_difficulty = hackDifficulty + ServerFortifyAmount * h_threads - weaken
+    //  final_difficulty = minDifficulty + ServerFortifyAmount * h_threads - weaken
     //  g_threads = threadConstant + threadMultiplier * h_threads (by definition above)
     //  Therefore:
     //  (money - money * c_pmh * h_threads + threadConstant + threadMultiplier * h_threads) * exp(
-    //    log(1 + ServerBaseGrowthIncr/(hackDifficulty + ServerFortifyAmount * h_threads - weaken)) * c_grow * g_threads) = money
+    //    log(1 + ServerBaseGrowthIncr/(minDifficulty + ServerFortifyAmount * h_threads - weaken)) * c_grow * g_threads) = money
     //  1 - h_threads * (c_pmh - threadMultiplier / money) + threadConstant / money = exp(
-    //    log1p((ServerBaseGrowthIncr/ServerFortifyAmount)/((hackDifficulty-weaken)/ServerFortifyAmount + h_threads)) *
+    //    log1p((ServerBaseGrowthIncr/ServerFortifyAmount)/((minDifficulty-weaken)/ServerFortifyAmount + h_threads)) *
     //    -c_grow * g_threads)
     //
-    //  let k1 = ServerBaseGrowthIncr/ServerFortifyAmount and k2 = (hackDifficulty - weaken) / ServerFortifyAmount
+    //  let k1 = ServerBaseGrowthIncr/ServerFortifyAmount and k2 = (minDifficulty - weaken) / ServerFortifyAmount
     //  let t_mult = c_pmh - threadMultiplier / money
     //
     //  0 = exp(log1p(k1/(k2+h_threads)) * -c_grow * g_threads) - 1 + h_threads * t_mult
@@ -1359,7 +1364,7 @@ class Extra {
       const t_mult = this.calculatePercentMoneyHacked(server, person) - threadMultiplier / server.moneyMax;
       const c = threadConstant / server.moneyMax;
       const k1 = 15; // ServerBaseGrowthIncr / ServerFortifyAmount
-      const k2 = 500 * (server.hackDifficulty - weaken);
+      const k2 = 500 * (server.minDifficulty - weaken);
       const k3 = k1 + k2;
       const c_grow = -this.calculateGrowthConstant(server, person, cores);
       let t = guess;
@@ -1373,20 +1378,21 @@ class Extra {
         const log = log_inner < 0.0035 ? Math.log1p(log_inner) : CONSTANTS.ServerMaxGrowthLog;
         const exp = Math.expm1(c_grow * log * linear);
         const y = exp + t * t_mult - c;
-        const yp = t_mult + c_grow * (exp + 1) * (
-          threadMultiplier * log - (log_inner < 0.0035 ? (log_inner * linear) / (k3 + t) : 0));
+        const yp =
+          t_mult +
+          c_grow * (exp + 1) * (threadMultiplier * log - (log_inner < 0.0035 ? (log_inner * linear) / (k3 + t) : 0));
         const newt = t - y / yp;
         diff = newt - t;
         thresh = t * relError;
         t = newt;
       } while (diff < -thresh || diff > thresh);
-      return {hack: t, grow: threadConstant + threadMultiplier * t};
+      return { hack: t, grow: threadConstant + threadMultiplier * t };
     } else {
       const c_grow = -this.calculateServerGrowthLog(server, 1, person, cores);
       const requiredHackingSkill = server.requiredHackingSkill ?? 1e9;
       const skillMult = (person.skills.hacking - (requiredHackingSkill - 1)) / person.skills.hacking;
       const c_pmh = (skillMult * person.mults.hacking_money * this.bnMults.ScriptHackMoney) / 6000000;
-      const k1 = 25000 - 250 * (server.hackDifficulty - weaken);
+      const k1 = 25000 - 250 * (server.minDifficulty - weaken);
       const invmon = 1 / server.moneyMax;
       let t = guess;
       let diff, thresh;
@@ -1401,7 +1407,7 @@ class Extra {
         thresh = t * relError;
         t = newt;
       } while (diff < -thresh || diff > thresh);
-      return {grow: t, hack: threadConstant + threadMultiplier * t};
+      return { grow: t, hack: threadConstant + threadMultiplier * t };
     }
   }
 }

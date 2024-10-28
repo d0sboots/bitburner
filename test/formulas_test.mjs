@@ -12,9 +12,7 @@ describe("Formulas.Hacking", function () {
         moneyMax: 2e9,
         moneyAvailable: 1e4,
         serverGrowth: 320,
-        baseDifficulty: 30,
         hackDifficulty: 10,
-        minDifficulty: 10,
         requiredHackingSkill: 20,
       });
       const person = formulas.mockPerson();
@@ -36,8 +34,6 @@ describe("Formulas.Hacking", function () {
         moneyMax: 2e9,
         moneyAvailable: 1e4,
         serverGrowth: 320,
-        baseDifficulty: 30,
-        hackDifficulty: 10,
         minDifficulty: 10,
         requiredHackingSkill: 20,
       });
@@ -52,6 +48,9 @@ describe("Formulas.Hacking", function () {
       };
       const {hack, grow} = extra.calculateBatchThreads(opts);
       expect(grow).is.within(50 - 1e-6, 50 + 1e-6);
+      // Shouldn't have modified the object
+      expect(server.hackDifficulty).equals(0);
+      server.hackDifficulty = server.minDifficulty;
 
       const pmh = hacking.hackPercent(server, person);
       server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
@@ -66,8 +65,6 @@ describe("Formulas.Hacking", function () {
         moneyMax:100,
         moneyAvailable:0,
         serverGrowth:30,
-        baseDifficulty:15,
-        hackDifficulty:5,
         minDifficulty:5,
         requiredHackingSkill:80,
       });
@@ -93,6 +90,10 @@ describe("Formulas.Hacking", function () {
       const {hack, grow} = extra.calculateBatchThreads(opts);
       expect(grow).is.within(35 - 1e-6, 35 + 1e-6);
 
+      // Shouldn't have modified the object
+      expect(server.hackDifficulty).equals(0);
+      server.hackDifficulty = server.minDifficulty;
+
       const pmh = hacking.hackPercent(server, person);
       server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
       server.hackDifficulty += 0.002 * hack;
@@ -107,8 +108,6 @@ describe("Formulas.Hacking", function () {
         moneyMax: 2e9,
         moneyAvailable: 1e4,
         serverGrowth: 320,
-        baseDifficulty: 30,
-        hackDifficulty: 10,
         minDifficulty: 10,
         requiredHackingSkill: 20,
       });
@@ -125,6 +124,10 @@ describe("Formulas.Hacking", function () {
       };
       const {hack, grow} = extra.calculateBatchThreads(opts);
 
+      // Shouldn't have modified the object
+      expect(server.hackDifficulty).equals(0);
+      server.hackDifficulty = server.minDifficulty;
+
       const pmh = hacking.hackPercent(server, person);
       server.moneyAvailable = server.moneyMax - server.moneyMax * pmh * hack;
       server.hackDifficulty += 0.002 * hack - opts.weaken;
@@ -138,8 +141,6 @@ describe("Formulas.Hacking", function () {
         moneyMax: 2e9,
         moneyAvailable: 1e4,
         serverGrowth: 320,
-        baseDifficulty: 30,
-        hackDifficulty: 10,
         minDifficulty: 10,
         requiredHackingSkill: 20,
       });
@@ -155,6 +156,10 @@ describe("Formulas.Hacking", function () {
       const {hack, grow} = extra.calculateBatchThreads(opts);
       expect(hack).is.within(50 - 1e-6, 50 + 1e-6);
 
+      // Shouldn't have modified the object
+      expect(server.hackDifficulty).equals(0);
+      server.hackDifficulty = server.minDifficulty;
+
       const mul = extra.calculateServerGrowth(server, grow, person);
       const drained = server.moneyMax - (server.moneyMax / mul - grow);
       server.hackDifficulty += 0.004 * grow;
@@ -169,8 +174,6 @@ describe("Formulas.Hacking", function () {
         moneyMax: 2e9,
         moneyAvailable: 1e4,
         serverGrowth: 320,
-        baseDifficulty: 30,
-        hackDifficulty: 10,
         minDifficulty: 10,
         requiredHackingSkill: 20,
       });
@@ -186,6 +189,10 @@ describe("Formulas.Hacking", function () {
         weaken: 0.2,
       };
       const {hack, grow} = extra.calculateBatchThreads(opts);
+      // Shouldn't have modified the object
+      expect(server.hackDifficulty).equals(0);
+      server.hackDifficulty = server.minDifficulty;
+
       const mul = extra.calculateServerGrowth(server, grow, person);
       const drained = server.moneyMax - (server.moneyMax / mul - grow);
       server.hackDifficulty += 0.004 * grow - opts.weaken;
